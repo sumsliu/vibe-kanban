@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,10 @@ pub struct CodingAgentFollowUpRequest {
     /// If None, uses the container_ref directory directly.
     #[serde(default)]
     pub working_dir: Option<String>,
+    /// Optional environment variables to pass to the executor.
+    /// These are merged with runtime env (taking precedence).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
 }
 
 impl CodingAgentFollowUpRequest {
@@ -50,6 +54,13 @@ impl Executable for CodingAgentFollowUpRequest {
             None => current_dir.to_path_buf(),
         };
 
+        // Merge request-level env with runtime env
+        let merged_env = if let Some(ref request_env) = self.env {
+            env.clone().with_overrides(request_env)
+        } else {
+            env.clone()
+        };
+
         let executor_profile_id = self.get_executor_profile_id();
         let mut agent = ExecutorConfigs::get_cached()
             .get_coding_agent(&executor_profile_id)
@@ -60,7 +71,7 @@ impl Executable for CodingAgentFollowUpRequest {
         agent.use_approvals(approvals.clone());
 
         agent
-            .spawn_follow_up(&effective_dir, &self.prompt, &self.session_id, env)
+            .spawn_follow_up(&effective_dir, &self.prompt, &self.session_id, &merged_env)
             .await
     }
 }

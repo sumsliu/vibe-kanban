@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,9 @@ pub struct CodingAgentInitialRequest {
     /// If None, uses the container_ref directory directly.
     #[serde(default)]
     pub working_dir: Option<String>,
+    /// Optional environment variables to pass to the executor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
 }
 
 impl CodingAgentInitialRequest {
@@ -45,6 +48,13 @@ impl Executable for CodingAgentInitialRequest {
             None => current_dir.to_path_buf(),
         };
 
+        // Merge request-level env with runtime env
+        let merged_env = if let Some(ref request_env) = self.env {
+            env.clone().with_overrides(request_env)
+        } else {
+            env.clone()
+        };
+
         let executor_profile_id = self.executor_profile_id.clone();
         let mut agent = ExecutorConfigs::get_cached()
             .get_coding_agent(&executor_profile_id)
@@ -54,6 +64,6 @@ impl Executable for CodingAgentInitialRequest {
 
         agent.use_approvals(approvals.clone());
 
-        agent.spawn(&effective_dir, &self.prompt, env).await
+        agent.spawn(&effective_dir, &self.prompt, &merged_env).await
     }
 }

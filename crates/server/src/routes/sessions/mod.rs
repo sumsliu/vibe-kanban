@@ -92,6 +92,11 @@ pub struct CreateFollowUpAttempt {
     pub retry_process_id: Option<Uuid>,
     pub force_when_dirty: Option<bool>,
     pub perform_git_reset: Option<bool>,
+    /// Optional working directory (relative to container_ref)
+    pub working_dir: Option<String>,
+    /// Optional environment variables to pass to Claude Code
+    #[serde(default)]
+    pub env: Option<std::collections::HashMap<String, String>>,
 }
 
 pub async fn follow_up(
@@ -174,18 +179,24 @@ pub async fn follow_up(
     let latest_agent_session_id =
         ExecutionProcess::find_latest_coding_agent_turn_session_id(pool, session.id).await?;
 
+    // Extract fields from payload
     let prompt = payload.prompt;
+    let request_env = payload.env;
+    let request_working_dir = payload.working_dir;
 
     let project_repos = ProjectRepo::find_by_project_id_with_names(pool, project.id).await?;
     let cleanup_action = deployment
         .container()
         .cleanup_actions_for_repos(&project_repos);
 
-    let working_dir = workspace
-        .agent_working_dir
-        .as_ref()
-        .filter(|dir| !dir.is_empty())
-        .cloned();
+    // Use request.working_dir if provided, otherwise fall back to workspace.agent_working_dir
+    let working_dir = request_working_dir.or_else(|| {
+        workspace
+            .agent_working_dir
+            .as_ref()
+            .filter(|dir| !dir.is_empty())
+            .cloned()
+    });
 
     let action_type = if let Some(agent_session_id) = latest_agent_session_id {
         ExecutorActionType::CodingAgentFollowUpRequest(CodingAgentFollowUpRequest {
@@ -193,6 +204,7 @@ pub async fn follow_up(
             session_id: agent_session_id,
             executor_profile_id: executor_profile_id.clone(),
             working_dir: working_dir.clone(),
+            env: request_env.clone(),
         })
     } else {
         ExecutorActionType::CodingAgentInitialRequest(
@@ -200,6 +212,7 @@ pub async fn follow_up(
                 prompt,
                 executor_profile_id: executor_profile_id.clone(),
                 working_dir,
+                env: request_env,
             },
         )
     };

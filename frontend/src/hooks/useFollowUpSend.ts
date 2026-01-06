@@ -49,6 +49,8 @@ export function useFollowUpSend({
         retry_process_id: null,
         force_when_dirty: null,
         perform_git_reset: null,
+        working_dir: null,
+        env: null,
       };
       await sessionsApi.followUp(sessionId, body);
       clearComments();

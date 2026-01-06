@@ -70,7 +70,8 @@ RUN apk add --no-cache \
     wget \
     git \
     nodejs \
-    npm
+    npm \
+    bash
 
 # Create app user for security
 RUN addgroup -g 1001 -S appgroup && \
@@ -89,6 +90,7 @@ USER appuser
 # Set runtime environment
 ENV HOST=0.0.0.0
 ENV PORT=3000
+ENV SHELL=/bin/bash
 EXPOSE 3000
 
 # Set working directory

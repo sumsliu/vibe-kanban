@@ -833,12 +833,14 @@ impl LocalContainerService {
                 session_id: agent_session_id,
                 executor_profile_id: executor_profile_id.clone(),
                 working_dir: working_dir.clone(),
+                env: None,
             })
         } else {
             ExecutorActionType::CodingAgentInitialRequest(CodingAgentInitialRequest {
                 prompt: queued_data.message.clone(),
                 executor_profile_id: executor_profile_id.clone(),
                 working_dir,
+                env: None,
             })
         };
 
