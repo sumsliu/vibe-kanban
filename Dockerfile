@@ -140,8 +140,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 # Copy binary from builder
 COPY --from=builder /app/target/release/server /usr/local/bin/server
 
-# Create working directories
-RUN mkdir -p /repos /writing
+# Create non-root user for Claude Code (v5.1.28 - fix root + skip-permissions conflict)
+RUN groupadd -r claude && useradd -r -g claude -m -d /home/claude claude
+
+# Create working directories with proper permissions
+RUN mkdir -p /repos /writing && \
+    chown -R claude:claude /repos /writing
+
+# Configure conda and npm for non-root user
+RUN mkdir -p /home/claude/.npm /home/claude/.config && \
+    chown -R claude:claude /home/claude && \
+    echo '. /opt/conda/etc/profile.d/conda.sh && conda activate researstudio' >> /home/claude/.bashrc
 
 # Set runtime environment
 ENV HOST=0.0.0.0
@@ -149,11 +158,15 @@ ENV PORT=3000
 ENV SHELL=/bin/bash
 ENV PYTHONPATH="/writing/modules:/writing"
 # v5.1.24: Force bash to source bashrc in non-interactive shells
-ENV BASH_ENV=/root/.bashrc
+ENV BASH_ENV=/home/claude/.bashrc
+ENV HOME=/home/claude
 EXPOSE 3000
 
 # Set working directory
 WORKDIR /repos
+
+# Switch to non-root user for Claude Code execution
+USER claude
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

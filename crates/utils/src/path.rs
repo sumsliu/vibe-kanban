@@ -102,6 +102,19 @@ pub fn normalize_macos_private_alias<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 pub fn get_vibe_kanban_temp_dir() -> std::path::PathBuf {
+    // v5.1.28: Check VK_WORKTREES_DIR environment variable first
+    // This allows overriding the default worktree directory in Docker containers
+    if let Ok(worktrees_dir) = std::env::var("VK_WORKTREES_DIR") {
+        // VK_WORKTREES_DIR should be the full worktrees path, e.g., /repos
+        // Return the parent directory since caller appends "worktrees" suffix
+        let worktrees_path = std::path::PathBuf::from(&worktrees_dir);
+        if let Some(parent) = worktrees_path.parent() {
+            return parent.to_path_buf();
+        }
+        // If no parent (e.g., root path), use the path directly
+        return worktrees_path;
+    }
+
     let dir_name = if cfg!(debug_assertions) {
         "vibe-kanban-dev"
     } else {
