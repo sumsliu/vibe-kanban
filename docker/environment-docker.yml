@@ -1,0 +1,56 @@
+# Docker 专用 conda 环境定义
+# Version: v5.1.19
+# 用于 vibe-kanban 容器内的完整 Python 数据分析环境
+
+name: researstudio
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+
+  # 深度学习框架 (CPU版本，减小镜像体积)
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cpuonly
+
+  # 科学计算
+  - numpy>=2.0
+  - scipy>=1.14
+  - pandas>=2.2
+
+  # 可视化
+  - matplotlib>=3.9
+  - seaborn>=0.13
+
+  # ML 库 (通过 conda 安装，避免编译问题)
+  - scikit-learn>=1.5
+  - xgboost>=2.1
+  - lightgbm>=4.5
+
+  - pip:
+    # 额外 ML
+    - catboost>=1.2
+
+    # 临床统计分析
+    - lifelines>=0.29
+    - scikit-survival>=0.24
+    - statsmodels>=0.14
+
+    # 深度学习 / NLP
+    - transformers>=4.45
+    - sentence-transformers>=3.0
+
+    # 模型解释
+    - shap>=0.46
+
+    # 科研可视化
+    - SciencePlots>=2.1
+
+    # 工具库
+    - pydantic>=2.9
+    - pyyaml>=6.0
+    - pytest
