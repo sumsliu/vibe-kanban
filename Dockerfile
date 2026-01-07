@@ -115,6 +115,9 @@ RUN /opt/conda/envs/researstudio/bin/pip install --no-cache-dir \
     torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/cpu
 
+# v5.1.26: 安装 MCP (Model Context Protocol) 模块 - Claude Code MCP 服务器依赖
+RUN /opt/conda/envs/researstudio/bin/pip install --no-cache-dir mcp aiohttp
+
 # v5.1.24: Configure conda auto-activation for non-interactive shells
 # Step 1: Create symlinks for direct binary access
 RUN ln -sf /opt/conda/envs/researstudio/bin/python /usr/local/bin/python && \
