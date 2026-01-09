@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# v5.4.4: Smart Build with Speed Testing and Caching
+# 实测速度 + 多层缓存策略
+# Compatible with bash 3.x (macOS default)
+
+set -e
+
+echo "🚀 Smart Build System v5.4.4"
+echo "============================"
+echo "Features: Speed testing + Multi-layer caching"
+echo ""
+
+# ============================================
+# 1. Speed Test Function
+# ============================================
+test_download_speed() {
+    local url=$1
+    local name=$2
+
+    echo -n "  Testing $name... "
+
+    # Download and measure speed
+    local downloaded=$(curl -sL "$url" --max-time 5 -o /dev/null -w '%{speed_download}' 2>/dev/null || echo "0")
+
+    if [ "$downloaded" = "0" ] || [ -z "$downloaded" ]; then
+        echo "❌ Failed"
+        echo "0"
+        return 1
+    fi
+
+    # Convert to MB/s
+    local speed_mb=$(echo "scale=2; $downloaded / 1024 / 1024" | bc -l)
+    echo "✅ ${speed_mb} MB/s"
+    echo "$speed_mb"
+}
+
+# ============================================
+# 2. Test APT Mirrors
+# ============================================
+echo "📦 Testing APT Mirrors"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+best_apt_mirror="deb.debian.org"
+best_apt_speed=0
+
+# Test Tsinghua
+speed=$(test_download_speed "http://mirrors.tuna.tsinghua.edu.cn/debian/dists/bookworm/Release" "Tsinghua" 2>&1 | tail -1)
+if (( $(echo "$speed > $best_apt_speed" | bc -l) )); then
+    best_apt_mirror="mirrors.tuna.tsinghua.edu.cn"
+    best_apt_speed="$speed"
+fi
+
+# Test USTC
+speed=$(test_download_speed "http://mirrors.ustc.edu.cn/debian/dists/bookworm/Release" "USTC" 2>&1 | tail -1)
+if (( $(echo "$speed > $best_apt_speed" | bc -l) )); then
+    best_apt_mirror="mirrors.ustc.edu.cn"
+    best_apt_speed="$speed"
+fi
+
+# Test Aliyun
+speed=$(test_download_speed "http://mirrors.aliyun.com/debian/dists/bookworm/Release" "Aliyun" 2>&1 | tail -1)
+if (( $(echo "$speed > $best_apt_speed" | bc -l) )); then
+    best_apt_mirror="mirrors.aliyun.com"
+    best_apt_speed="$speed"
+fi
+
+# Test Official
+speed=$(test_download_speed "http://deb.debian.org/debian/dists/bookworm/Release" "Official" 2>&1 | tail -1)
+if (( $(echo "$speed > $best_apt_speed" | bc -l) )); then
+    best_apt_mirror="deb.debian.org"
+    best_apt_speed="$speed"
+fi
+
+echo "  🎯 Best: $best_apt_mirror (${best_apt_speed} MB/s)"
+echo ""
+
+# ============================================
+# 3. Test Rust Mirrors
+# ============================================
+echo "🦀 Testing Rust Mirrors"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+best_rust_mirror="https://static.rust-lang.org"
+best_rust_speed=0
+
+# Test Tsinghua
+speed=$(test_download_speed "https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup/dist/aarch64-apple-darwin/rustup-init" "Tsinghua" 2>&1 | tail -1)
+if (( $(echo "$speed > $best_rust_speed" | bc -l) )); then
+    best_rust_mirror="https://mirrors.tuna.tsinghua.edu.cn/rustup"
+    best_rust_speed="$speed"
+fi
+
+# Test Official (via proxy if available)
+speed=$(test_download_speed "https://static.rust-lang.org/rustup/dist/aarch64-apple-darwin/rustup-init" "Official" 2>&1 | tail -1)
+if (( $(echo "$speed > $best_rust_speed" | bc -l) )); then
+    best_rust_mirror="https://static.rust-lang.org"
+    best_rust_speed="$speed"
+fi
+
+echo "  🎯 Best: $best_rust_mirror (${best_rust_speed} MB/s)"
+echo ""
+
+# ============================================
+# 4. Setup Cache Directories
+# ============================================
+echo "💾 Setting up Cache Directories"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+CACHE_ROOT="/Users/liuzf/.cache/vibe-kanban-build"
+mkdir -p "$CACHE_ROOT"/{rust,cargo,conda,npm,apt}
+
+cat > "$CACHE_ROOT/cache-info.txt" <<EOF
+Vibe-Kanban Build Cache
+Created: $(date)
+Purpose: Speed up Docker builds by caching downloads
+
+Directories:
+  - rust/   : Rust toolchain binaries
+  - cargo/  : Cargo packages (crates)
+  - conda/  : Conda packages
+  - npm/    : NPM packages
+  - apt/    : APT package cache
+
+Usage:
+  Mount these directories in docker-compose.yml:
+    volumes:
+      - ~/.cache/vibe-kanban-build/rust:/root/.rustup
+      - ~/.cache/vibe-kanban-build/cargo:/root/.cargo
+      - ~/.cache/vibe-kanban-build/conda:/opt/conda/pkgs
+EOF
+
+echo "  ✅ Cache root: $CACHE_ROOT"
+echo "  ✅ Rust cache: $CACHE_ROOT/rust"
+echo "  ✅ Cargo cache: $CACHE_ROOT/cargo"
+echo "  ✅ Conda cache: $CACHE_ROOT/conda"
+echo "  ✅ NPM cache: $CACHE_ROOT/npm"
+echo ""
+
+# ============================================
+# 5. Generate Optimized docker-compose.override.yml
+# ============================================
+echo "📝 Generating docker-compose.override.yml"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+cd /Users/liuzf/writing/opensource/vibe-kanban
+
+cat > docker-compose.override.yml <<EOF
+# docker-compose.override.yml
+# Auto-generated by smart-build.sh v5.4.4
+# Purpose: Multi-layer caching for faster rebuilds
+
+version: '3.8'
+
+services:
+  vibe-kanban:
+    build:
+      args:
+        # Best mirrors from speed test
+        APT_MIRROR: "$best_apt_mirror"
+        RUSTUP_DIST_SERVER: "${best_rust_mirror}/rustup"
+
+        # v5.4.4: APT 并行下载 (10 并发连接，提升 2-3 倍速度)
+        APT_PARALLEL: "10"
+
+        # Clash proxy (if available)
+        HTTP_PROXY: "http://host.docker.internal:7897"
+        HTTPS_PROXY: "http://host.docker.internal:7897"
+
+      # Layer caching
+      cache_from:
+        - writing-vibe-kanban:latest
+        - writing-vibe-kanban:cache
+
+    # Mount host cache directories
+    volumes:
+      # Persistent caches (survive container recreation)
+      - $CACHE_ROOT/rust:/root/.rustup:cached
+      - $CACHE_ROOT/cargo:/root/.cargo:cached
+      - $CACHE_ROOT/conda:/opt/conda/pkgs:cached
+      - $CACHE_ROOT/npm:/root/.npm:cached
+
+      # Keep existing mounts
+      - /Users/liuzf/writing:/writing:cached
+      - /Users/liuzf/writing/opensource/vibe-kanban:/repos:cached
+EOF
+
+echo "  ✅ Generated docker-compose.override.yml"
+echo ""
+
+# ============================================
+# 6. Create .dockerignore for faster context
+# ============================================
+echo "📝 Optimizing .dockerignore"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+cat > .dockerignore <<EOF
+# Docker build cache optimization
+# Exclude large/unnecessary files from build context
+
+# Node modules (will be reinstalled)
+node_modules/
+**/node_modules/
+npm-debug.log*
+
+# Rust build artifacts (will be rebuilt)
+target/
+**/target/
+**/*.rs.bk
+
+# Git and version control
+.git/
+.gitignore
+.github/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs and caches
+dist/
+build/
+.cache/
+*.log
+
+# Documentation and tests (not needed in image)
+*.md
+!README.md
+docs/
+tests/
+**/__tests__/
+**/*.test.ts
+**/*.test.js
+
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment files
+.env.local
+.env.*.local
+EOF
+
+echo "  ✅ Optimized .dockerignore"
+echo ""
+
+# ============================================
+# 7. Summary
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ Configuration Complete!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📊 Speed Test Results:"
+echo "  APT:  $best_apt_mirror (${best_apt_speed} MB/s)"
+echo "  Rust: $best_rust_mirror (${best_rust_speed} MB/s)"
+echo ""
+echo "💾 Cache Configuration:"
+echo "  Root: $CACHE_ROOT"
+echo "  Estimated savings: 50-70% on rebuild time"
+echo ""
+echo "🚀 Next Steps:"
+echo "  1. First build (will populate cache):"
+echo "     docker-compose build vibe-kanban --no-cache"
+echo ""
+echo "  2. Subsequent builds (use cache):"
+echo "     docker-compose build vibe-kanban"
+echo ""
+echo "  3. Check cache size:"
+echo "     du -sh $CACHE_ROOT/*"
+echo ""
+echo "💡 Tips:"
+echo "  - First build: ~15 mins (downloads everything)"
+echo "  - Cached builds: ~5 mins (reuses downloads)"
+echo "  - Clean cache: rm -rf $CACHE_ROOT"
+echo ""

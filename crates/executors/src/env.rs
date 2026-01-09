@@ -17,6 +17,31 @@ impl ExecutionEnv {
         }
     }
 
+    /// Create a new ExecutionEnv with inherited environment variables from the current process.
+    /// This is useful for inheriting Docker container environment variables.
+    /// Only inherits variables that match the specified prefixes.
+    pub fn with_inherited_vars(prefixes: &[&str]) -> Self {
+        let mut env = Self::new();
+        for (key, value) in std::env::vars() {
+            for prefix in prefixes {
+                if key.starts_with(prefix) {
+                    env.insert(&key, &value);
+                    break;
+                }
+            }
+        }
+        env
+    }
+
+    /// Inherit specific environment variables from the current process.
+    pub fn inherit_vars(&mut self, var_names: &[&str]) {
+        for name in var_names {
+            if let Ok(value) = std::env::var(name) {
+                self.insert(*name, value);
+            }
+        }
+    }
+
     /// Insert an environment variable
     pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.vars.insert(key.into(), value.into());

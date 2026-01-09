@@ -54,3 +54,9 @@ dependencies:
     - pydantic>=2.9
     - pyyaml>=6.0
     - pytest
+
+    # MCP 服务器依赖 (v5.3.1)
+    - requests>=2.31
+    - python-dotenv>=1.0
+    - defusedxml>=0.7
+    - aiohttp>=3.9

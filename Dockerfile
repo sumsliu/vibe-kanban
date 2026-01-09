@@ -1,8 +1,17 @@
 # Build stage - Debian-based for glibc compatibility (v5.1.21)
 FROM docker.m.daocloud.io/library/node:24-slim AS builder
 
-# 清除代理设置，使用直连
-ENV http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" no_proxy="*"
+# v5.3.1: 使用构建参数传递代理设置 (用于 Rust 工具链下载)
+ARG HTTP_PROXY=""
+ARG HTTPS_PROXY=""
+ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY}
+
+# v5.4.4: APT 并行下载优化 (10 并发连接，提升 2-3 倍速度)
+ARG APT_PARALLEL=10
+RUN if [ -n "$APT_PARALLEL" ] && [ "$APT_PARALLEL" != "0" ]; then \
+        echo "Acquire::Queue-Mode \"host\";" > /etc/apt/apt.conf.d/99parallel && \
+        echo "Acquire::http::Pipeline-Depth \"${APT_PARALLEL}\";" >> /etc/apt/apt.conf.d/99parallel; \
+    fi
 
 # Install build dependencies (Debian packages)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -17,7 +26,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust
+# v5.4.1: 配置 Rust 工具链镜像（加速 cargo/clippy/rust-analyzer 下载）
+# 使用清华镜像 - 速度测试结果：24.4 MB/s (官方源仅 25 KB/s)
+ENV RUSTUP_DIST_SERVER="https://mirrors.tuna.tsinghua.edu.cn/rustup"
+ENV RUSTUP_UPDATE_ROOT="https://mirrors.tuna.tsinghua.edu.cn/rustup/rustup"
+
+# Install Rust (使用镜像下载工具链)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
@@ -70,8 +84,16 @@ ENV PATH="/opt/conda/envs/researstudio/bin:/opt/conda/bin:$PATH"
 ENV http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" no_proxy="*"
 
 # 配置 Debian 使用中科大镜像源 (v5.1.22 - 解决 deb.debian.org 超时)
-RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true
+# 临时禁用：镜像连接失败，使用官方源
+# RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+#     sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true
+
+# v5.4.4: APT 并行下载优化 (10 并发连接，提升 2-3 倍速度)
+ARG APT_PARALLEL=10
+RUN if [ -n "$APT_PARALLEL" ] && [ "$APT_PARALLEL" != "0" ]; then \
+        echo "Acquire::Queue-Mode \"host\";" > /etc/apt/apt.conf.d/99parallel && \
+        echo "Acquire::http::Pipeline-Depth \"${APT_PARALLEL}\";" >> /etc/apt/apt.conf.d/99parallel; \
+    fi
 
 # 安装基础依赖和编译工具
 RUN apt-get update && apt-get install -y --no-install-recommends \

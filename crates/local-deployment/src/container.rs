@@ -1070,6 +1070,15 @@ impl ContainerService for LocalContainerService {
         // Build ExecutionEnv with VK_* variables
         let mut env = ExecutionEnv::new();
 
+        // Inherit critical environment variables from Docker container
+        // These are needed for Claude Code skills and hooks to work properly
+        env.inherit_vars(&[
+            "CLAUDE_PROJECT_DIR",
+            "WRITING_ROOT",
+            "WRITING_DIR",
+            "ANTHROPIC_API_KEY",
+        ]);
+
         // Load task and project context for environment variables
         let task = workspace
             .parent_task(&self.db.pool)
